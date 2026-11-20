@@ -53,7 +53,7 @@ To test the relay on purpose, add `?relay=1` to the URL on both devices. The top
 | | You (PC) | Her (iPhone) |
 |---|---|---|
 | Browser | Chrome or Edge | Safari (or the Home Screen app) |
-| Sound | **Earphones**, otherwise the movie leaks into your mic | Earphones or AirPods for the best sound |
+| Sound | Speakers are fine in Movie mode or tab sharing (echo-safe). **Wear earphones** when sharing the whole screen | Earphones or AirPods for the best sound |
 | Stream | **Movie** button for MP4/WebM; **Screen** for everything else | Turn the phone sideways |
 
 - **Screen mode sound**: in Chrome's share picker, tick **Share system audio** (Entire screen) or **Share tab audio** (a tab). Mac Chrome can't capture system sound, so use Movie mode or share a tab.
@@ -62,6 +62,11 @@ To test the relay on purpose, add `?relay=1` to the URL on both devices. The top
 - **Ramp-up**: WebRTC probes your bandwidth, so the picture can take 10–30 s to reach full sharpness.
 - **Upload speed**: 1080p60 needs about 10 Mbps of upload on your side. If her picture stutters, either of you can pick a lower preset in Settings.
 - **Keep the TwoSeats tab visible** in Movie mode. A hidden tab falls back to 30 fps.
+
+### She hears the sound twice or an echo
+- **Movie mode** is echo-safe by default. Your playback goes through a loopback connection, so Chrome's echo canceller strips it from your mic (Settings → *Echo-safe sound on this PC*).
+- **Sharing a Chrome tab** is echo-safe too: the tab goes quiet and TwoSeats plays it for you.
+- **Sharing the whole screen with system sound** (VLC and similar): TwoSeats asks Chrome to leave your partner's voice out of the captured sound (`restrictOwnAudio`, Chrome on Windows/Mac). VLC's sound from your speakers still reaches your mic, so **wear earphones** in this mode, or use Movie or a shared tab instead.
 
 Keyboard (PC): `Space` play/pause, `←`/`→` ±10 s, `M` mute, `V` camera, `C` chat, `F` full screen.
 

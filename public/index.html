@@ -178,7 +178,9 @@
           <label class="slider"><span>Movie volume</span><input id="movieVol" type="range" min="0" max="150" value="100"><output id="movieVolOut">100%</output></label>
           <label class="slider" id="voiceVolRow"><span>Partner's voice</span><input id="voiceVol" type="range" min="0" max="100" value="100"><output id="voiceVolOut">100%</output></label>
           <label class="slider host-only" id="localVolRow"><span>Movie on this PC</span><input id="localVol" type="range" min="0" max="100" value="100"><output id="localVolOut">100%</output></label>
-          <p class="note">Movie volume changes what the person watching hears, so you can balance it against your voices. Earphones stop the movie echoing through the mic.</p>
+          <label class="check host-only"><input type="checkbox" id="echoSafe" checked> Echo-safe sound on this PC</label>
+          <p class="note host-only">Keeps the movie from your speakers out of your mic, so your partner hears it once. Your own sound runs about 50 ms behind the picture; if you wear earphones you can turn this off.</p>
+          <p class="note">Movie volume changes what the person watching hears, so you can balance it against your voices.</p>
         </section>
 
         <section id="subsSection" class="host-only">

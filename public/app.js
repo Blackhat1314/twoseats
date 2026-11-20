@@ -127,7 +127,7 @@
     'playerBar', 'pbToggle', 'pbBack', 'pbFwd', 'pbTime', 'pbSeek', 'pbDur', 'pbCountdown',
     'controls', 'micBtn', 'camBtn', 'fileBtn', 'screenBtn', 'stopShareBtn', 'reactBtn', 'chatBtn', 'chatBadge', 'settingsBtn', 'fsBtn', 'leaveBtn',
     'reactTray', 'chatPanel', 'chatList', 'chatForm', 'chatInput', 'settingsPanel', 'qualitySel', 'qualityNote', 'codecSel',
-    'movieVol', 'movieVolOut', 'voiceVol', 'voiceVolOut', 'voiceVolRow', 'localVol', 'localVolOut', 'subsSection', 'subLoadBtn', 'subClearBtn', 'subName',
+    'movieVol', 'movieVolOut', 'voiceVol', 'voiceVolOut', 'voiceVolRow', 'localVol', 'localVolOut', 'echoSafe', 'subsSection', 'subLoadBtn', 'subClearBtn', 'subName',
     'subEarlier', 'subLater', 'subOffsetOut', 'subSize', 'allowControl', 'popoutBtn', 'statsToggle', 'stats', 'fileInput', 'subInput',
   ].forEach((id) => (el[id] = document.getElementById(id)));
 
@@ -882,12 +882,80 @@
     }
     if (M.ctx.state !== 'running') M.ctx.resume().catch(() => {});
   }
-  function connectMovieAudio(track) {
+  // Audio graph on the PC that streams:
+  //   source ──► gain ──► dest              (what your partner hears; "Movie volume")
+  //   source ──► localGain ──► loopback PC ──► <audio>   (what you hear, echo-safe)
+  //                        └─► speakers directly          (echo-safe off)
+  // Chrome's echo canceller reliably removes only audio that arrives over an RTCPeerConnection
+  // from the mic. Sending our own playback through a loopback connection inside this page turns
+  // the movie into that kind of audio, so speakers playing the movie no longer leak it into the
+  // mic and your partner doesn't hear everything twice.
+  function connectMovieAudio(source, playLocal) {
     const M = S.movie;
     if (M.src) { try { M.src.disconnect(); } catch {} M.src = null; }
-    if (!track || !M.ctx) return;
-    M.src = M.ctx.createMediaStreamSource(new MediaStream([track]));
+    if (!source || !M.ctx) return;
+    M.src = source instanceof AudioNode ? source : M.ctx.createMediaStreamSource(new MediaStream([source]));
     M.src.connect(M.gain);
+    if (playLocal) { ensureLocalOut(); M.src.connect(M.localGain); }
+  }
+
+  const Echo = { a: null, b: null, dest: null, audio: null };
+  function ensureLocalOut() {
+    const M = S.movie;
+    ensureMovieAudio();
+    if (!M.localGain) {
+      M.localGain = M.ctx.createGain();
+      M.localGain.gain.value = Number(el.localVol.value) / 100;
+      routeLocalOut();
+    }
+  }
+  function routeLocalOut() {
+    const M = S.movie;
+    if (!M.localGain) return;
+    try { M.localGain.disconnect(); } catch {}
+    if (el.echoSafe.checked && startLoopback()) M.localGain.connect(Echo.dest);
+    else { stopLoopback(); M.localGain.connect(M.ctx.destination); }
+  }
+  function startLoopback() {
+    if (Echo.a) return true;
+    if (!window.RTCPeerConnection) return false;
+    const M = S.movie;
+    Echo.dest = M.ctx.createMediaStreamDestination();
+    Echo.dest.channelCount = 2;
+    Echo.audio = new Audio();
+    Echo.audio.autoplay = true;
+    const a = new RTCPeerConnection();
+    const b = new RTCPeerConnection();
+    Echo.a = a;
+    Echo.b = b;
+    a.onicecandidate = (e) => { if (e.candidate) b.addIceCandidate(e.candidate).catch(() => {}); };
+    b.onicecandidate = (e) => { if (e.candidate) a.addIceCandidate(e.candidate).catch(() => {}); };
+    b.ontrack = (e) => {
+      try { e.receiver.jitterBufferTarget = 0; } catch {}
+      Echo.audio.srcObject = new MediaStream([e.track]);
+      Echo.audio.play().catch(() => {});
+    };
+    a.addTrack(Echo.dest.stream.getAudioTracks()[0]);
+    (async () => {
+      try {
+        await a.setLocalDescription();
+        await b.setRemoteDescription({ type: 'offer', sdp: tuneRemoteSdp(a.localDescription.sdp) });
+        await b.setLocalDescription();
+        await a.setRemoteDescription({ type: 'answer', sdp: tuneRemoteSdp(b.localDescription.sdp) });
+        await tuneSender(a.getSenders()[0], { maxBitrate: 256000 });
+      } catch (err) {
+        console.warn('[echo-safe]', err);
+        el.echoSafe.checked = false;
+        routeLocalOut();
+      }
+    })();
+    return true;
+  }
+  function stopLoopback() {
+    if (!Echo.a) return;
+    try { Echo.a.close(); Echo.b.close(); } catch {}
+    if (Echo.audio) { Echo.audio.pause(); Echo.audio.srcObject = null; }
+    Echo.a = Echo.b = Echo.dest = Echo.audio = null;
   }
   function applyGain() {
     const M = S.movie;
@@ -945,16 +1013,19 @@
       M.captured.onaddtrack = syncFileTracks;
       M.captured.onremovetrack = syncFileTracks;
     }
-    v.volume = Number(el.localVol.value) / 100;
+    // The element's sound now flows only through our graph: one copy to your partner, one to you.
+    if (!M.elemSrc) M.elemSrc = M.ctx.createMediaElementSource(v);
+    v.volume = 1;
+    v.muted = false;
     M.active = true;
     M.mode = 'file';
-    M.srcTrack = undefined;
+    connectMovieAudio(M.elemSrc, true);
     syncFileTracks(true);
     sendApp({ type: 'movie', active: true, mode: 'file', title: M.title });
     sendApp({ type: 'quality', preset: S.preset });
     sendPlayback();
     updateStage();
-    toast(`Ready: <b>${esc(M.title)}</b>. Press play, or use <b>3, 2, 1, play</b>. Earphones on this PC keep the movie out of your mic.`, { ms: 7000 });
+    toast(`Ready: <b>${esc(M.title)}</b>. Press play, or use <b>3, 2, 1, play</b>.`, { ms: 6000 });
     clearInterval(M.audioCheck);
     M.audioCheck = setInterval(() => {
       if (!M.active || M.mode !== 'file' || v.paused || v.currentTime < 3) return;
@@ -1023,8 +1094,6 @@
     const M = S.movie;
     if (!M.active || M.mode !== 'file' || !M.captured) return;
     const cap = M.captured.getVideoTracks().find((t) => t.readyState === 'live') || null;
-    const at = M.captured.getAudioTracks().find((t) => t.readyState === 'live') || null;
-    if (at !== M.srcTrack) { M.srcTrack = at; connectMovieAudio(at); }
     const wantRelay = cap && PRESETS[S.preset].fps > 30 && document.visibilityState === 'visible';
     const vt = (wantRelay && startFrameRelay()) || cap;
     if (force === true || vt !== M.videoOut) setMovieVideo(vt);
@@ -1038,7 +1107,9 @@
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
         video: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: pr.fps, max: 60 } },
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false },
+        // restrictOwnAudio: drop this page's own sound (your partner's voice) from captured system audio.
+        // suppressLocalAudioPlayback: a shared tab stops playing itself; we play it echo-safe instead.
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true, suppressLocalAudioPlayback: true },
         systemAudio: 'include',
         selfBrowserSurface: 'exclude',
         surfaceSwitching: 'include',
@@ -1056,19 +1127,29 @@
     const at = stream.getAudioTracks()[0] || null;
     vt.onended = () => { if (M.screenStream === stream) stopMovie(); };
     try { await vt.applyConstraints({ width: { max: 1920 }, height: { max: pr.h }, frameRate: { max: pr.fps } }); } catch {}
+    const surface = (vt.getSettings && vt.getSettings().displaySurface) || '';
+    let aset = at && at.getSettings ? at.getSettings() : {};
+    if (at && surface !== 'browser' && aset.restrictOwnAudio !== true) {
+      try { await at.applyConstraints({ restrictOwnAudio: true }); aset = at.getSettings(); } catch {}
+    }
     M.active = true;
     M.mode = 'screen';
     M.title = '';
     clearSubs(true);
-    connectMovieAudio(at);
+    // A shared tab that no longer plays itself is played back by us, echo-safe.
+    connectMovieAudio(at, !!at && surface === 'browser' && aset.suppressLocalAudioPlayback === true);
     await setMovieVideo(vt);
     sendApp({ type: 'movie', active: true, mode: 'screen', title: '' });
     sendApp({ type: 'quality', preset: S.preset });
     updateStage();
     if (!at) {
       toast('No sound is being shared. Stop, share again, and tick <b>Share system audio</b> (whole screen) or <b>Share tab audio</b> (a Chrome tab).', { warn: true, ms: 10000 });
+    } else if (surface !== 'browser' && aset.restrictOwnAudio !== true) {
+      toast("This browser can't keep your partner's voice out of whole-screen sound, so they'll hear themselves echo. Use <b>Movie</b>, share a Chrome tab, or update Chrome.", { warn: true, ms: 14000 });
+    } else if (surface !== 'browser') {
+      toast('Whole-screen sound: if your speakers are on, your mic hears the movie and your partner gets it twice. Wear earphones, or use <b>Movie</b> or a shared Chrome tab, which are echo-safe.', { warn: true, ms: 14000 });
     } else {
-      toast('Sharing with sound. Earphones on this PC keep the movie out of your mic.');
+      toast('Sharing the tab with sound.');
     }
   }
 
@@ -1086,7 +1167,6 @@
       M.objectUrl = null;
     }
     connectMovieAudio(null);
-    M.srcTrack = undefined;
     const P0 = S.P;
     if (P0?.movieV) { P0.movieV.sender.replaceTrack(null).catch(() => {}); }
     stopFrameRelay();
@@ -1582,7 +1662,7 @@
     // host video element -> partner
     const v = el.localMovie;
     ['play', 'pause', 'seeked', 'ratechange', 'loadedmetadata', 'ended'].forEach((ev) => v.addEventListener(ev, sendPlayback));
-    v.addEventListener('playing', () => { syncFileTracks(); tuneMovieVideo(); });
+    v.addEventListener('playing', () => { if (S.movie.ctx && S.movie.ctx.state !== 'running') S.movie.ctx.resume().catch(() => {}); syncFileTracks(); tuneMovieVideo(); });
     v.addEventListener('loadedmetadata', tuneMovieVideo);
     setInterval(() => { if (S.movie.active && S.movie.mode === 'file' && !v.paused) sendPlayback(); }, 1000);
 
@@ -1606,7 +1686,13 @@
       sendApp({ type: 'gain', v: S.movieGain });
     };
     el.voiceVol.oninput = () => { el.partnerAudio.volume = el.voiceVol.value / 100; el.voiceVolOut.textContent = `${el.voiceVol.value}%`; };
-    el.localVol.oninput = () => { el.localMovie.volume = el.localVol.value / 100; el.localVolOut.textContent = `${el.localVol.value}%`; };
+    el.localVol.oninput = () => {
+      const M = S.movie;
+      if (M.localGain) M.localGain.gain.setTargetAtTime(el.localVol.value / 100, M.ctx.currentTime, 0.05);
+      el.localVolOut.textContent = `${el.localVol.value}%`;
+    };
+    el.echoSafe.checked = store.get('echoSafe') !== '0';
+    el.echoSafe.onchange = () => { store.set('echoSafe', el.echoSafe.checked ? '1' : '0'); routeLocalOut(); };
     el.subLoadBtn.onclick = () => {
       if (!(S.movie.active && S.movie.mode === 'file')) { toast('Start a movie file first, then add its subtitles.'); return; }
       el.subInput.click();
@@ -1702,5 +1788,5 @@
   initLobby();
   bindRoom();
   // exposed for debugging in the console
-  window.twoseats = { S, PRESETS };
+  window.twoseats = { S, PRESETS, Echo };
 })();
