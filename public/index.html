@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#170c1c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TwoSeats">
+  <meta name="description" content="Private movie night for two.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <title>TwoSeats</title>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= LOBBY ================= -->
+  <section id="lobby" class="screen">
+    <div class="lobby">
+      <div class="marquee" aria-label="TwoSeats">
+        <div class="bulbs" aria-hidden="true"></div>
+        <h1>Two<br>Seats</h1>
+      </div>
+      <p class="tagline">Movie night for two, wherever you both are.</p>
+
+      <div class="preview">
+        <video id="preview" muted playsinline autoplay></video>
+        <div id="previewOff" class="preview-off">Camera is off</div>
+      </div>
+
+      <form id="joinForm" class="join" autocomplete="off">
+        <label class="field">
+          <span>Your name</span>
+          <input id="nameInput" maxlength="24" placeholder="What should they see?" required>
+        </label>
+        <label class="field">
+          <span>Room</span>
+          <div class="row">
+            <input id="roomInput" maxlength="40" autocapitalize="off" spellcheck="false" required
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9\-]{2,39}">
+            <button type="button" id="newRoomBtn" class="icon-btn" title="Make a new room code" data-icon="refresh"></button>
+          </div>
+        </label>
+        <div class="toggles">
+          <label class="toggle"><input type="checkbox" id="joinMic" checked><span data-icon="mic"></span>Microphone</label>
+          <label class="toggle"><input type="checkbox" id="joinCam" checked><span data-icon="cam"></span>Camera</label>
+        </div>
+        <button id="joinBtn" class="primary" type="submit">Take your seat</button>
+        <p id="lobbyMsg" class="msg" role="status"></p>
+      </form>
+      <p class="hint" id="lobbyHint">Rooms hold two people. Join, then send the invite link to your partner.</p>
+    </div>
+  </section>
+
+  <!-- ================= ROOM ================= -->
+  <section id="room" class="screen hidden">
+    <div id="stage">
+      <video id="localMovie" class="movie hidden" playsinline></video>
+      <video id="remoteMovie" class="movie hidden" playsinline autoplay></video>
+
+      <div id="emptyStage" class="empty">
+        <div class="seats" aria-hidden="true">
+          <span class="seat taken" id="seatMe"></span><span class="seat" id="seatThem"></span>
+        </div>
+        <h2 id="emptyTitle">Your partner's seat is saved</h2>
+        <p id="emptyText">Send them the invite link. You'll connect as soon as they open it.</p>
+        <div class="empty-actions">
+          <button id="emptyInvite" class="primary small" data-icon-left="link">Copy invite link</button>
+          <button id="emptyFile" class="ghost small host-only" data-icon-left="film">Play a movie file</button>
+          <button id="emptyScreen" class="ghost small host-only" data-icon-left="screen">Share screen</button>
+        </div>
+      </div>
+
+      <div id="screenNotice" class="empty hidden">
+        <h2>Your screen is on their phone</h2>
+        <p>Play the movie in any player. Use <b>Pop out</b> to keep your partner's camera and chat on top of it.</p>
+        <div class="empty-actions">
+          <button id="popoutBtn2" class="primary small" data-icon-left="pip">Pop out</button>
+          <button id="stopShare2" class="ghost small" data-icon-left="stop">Stop sharing</button>
+        </div>
+      </div>
+
+      <div id="subtitle" class="subtitle" aria-live="off"></div>
+      <div id="reactionLayer" aria-hidden="true"></div>
+      <div id="countdown" class="countdown hidden" aria-live="assertive"></div>
+      <button id="tapToPlay" class="tap-to-play hidden">Tap to turn on sound</button>
+
+      <div id="bubbles">
+        <div class="bubble partner" id="partnerBubble">
+          <video id="partnerCam" playsinline autoplay muted></video>
+          <div class="avatar" id="partnerAvatar">?</div>
+          <div class="bubble-tag"><span id="partnerMicOff" class="hidden" data-icon="micOff"></span><span id="partnerNameTag">Partner</span></div>
+        </div>
+        <div class="bubble self" id="selfBubble">
+          <video id="selfCam" playsinline autoplay muted></video>
+          <div class="avatar" id="selfAvatar">?</div>
+        </div>
+      </div>
+
+      <div id="toasts" aria-live="polite"></div>
+    </div>
+    <audio id="partnerAudio" autoplay playsinline></audio>
+
+    <header id="topbar" class="chrome">
+      <div class="presence">
+        <span class="seats mini" aria-hidden="true"><span class="seat taken"></span><span class="seat" id="miniSeatThem"></span></span>
+        <span id="connText">Waiting for your partner</span>
+        <span id="connRoute" class="route hidden"></span>
+      </div>
+      <button id="inviteBtn" class="chip" data-icon-left="link">Invite</button>
+    </header>
+
+    <div id="playerBar" class="chrome hidden">
+      <button id="pbToggle" class="icon-btn" title="Play / pause (space)" data-icon="play"></button>
+      <button id="pbBack" class="icon-btn" title="Back 10 s" data-icon="back10"></button>
+      <button id="pbFwd" class="icon-btn" title="Forward 10 s" data-icon="fwd10"></button>
+      <span id="pbTime" class="time">0:00</span>
+      <input id="pbSeek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+      <span id="pbDur" class="time">0:00</span>
+      <button id="pbCountdown" class="chip" title="Count down 3-2-1, then play">3, 2, 1, play</button>
+    </div>
+
+    <nav id="controls" class="chrome">
+      <button id="micBtn" class="ctl" title="Mute (M)" data-icon="mic"><span>Mute</span></button>
+      <button id="camBtn" class="ctl" title="Camera (V)" data-icon="cam"><span>Camera</span></button>
+      <button id="fileBtn" class="ctl host-only" title="Stream a movie file from this computer" data-icon="film"><span>Movie</span></button>
+      <button id="screenBtn" class="ctl host-only" title="Share a screen, window or tab" data-icon="screen"><span>Screen</span></button>
+      <button id="stopShareBtn" class="ctl hidden" title="Stop streaming" data-icon="stop"><span>Stop</span></button>
+      <button id="reactBtn" class="ctl" title="React" data-icon="smile"><span>React</span></button>
+      <button id="chatBtn" class="ctl" title="Chat (C)" data-icon="chat"><span>Chat</span><i id="chatBadge" class="badge hidden"></i></button>
+      <button id="settingsBtn" class="ctl" title="Settings" data-icon="sliders"><span>Settings</span></button>
+      <button id="fsBtn" class="ctl" title="Full screen (F)" data-icon="expand"><span>Full</span></button>
+      <button id="leaveBtn" class="ctl danger" title="Leave" data-icon="leave"><span>Leave</span></button>
+    </nav>
+
+    <div id="reactTray" class="tray hidden" role="menu">
+      <button data-emoji="❤️">❤️</button><button data-emoji="😂">😂</button><button data-emoji="😮">😮</button>
+      <button data-emoji="😢">😢</button><button data-emoji="😍">😍</button><button data-emoji="🔥">🔥</button>
+      <button data-emoji="🍿">🍿</button><button data-emoji="😘">😘</button><button data-emoji="😱">😱</button>
+    </div>
+
+    <aside id="chatPanel" class="panel hidden" aria-label="Chat">
+      <header><h3>Chat</h3><button class="icon-btn" data-close="chatPanel" data-icon="x" title="Close"></button></header>
+      <ol id="chatList"></ol>
+      <form id="chatForm" class="chat-form">
+        <input id="chatInput" maxlength="1000" placeholder="Message" autocomplete="off" enterkeyhint="send">
+        <button class="icon-btn" type="submit" title="Send" data-icon="send"></button>
+      </form>
+    </aside>
+
+    <aside id="settingsPanel" class="panel hidden" aria-label="Settings">
+      <header><h3>Settings</h3><button class="icon-btn" data-close="settingsPanel" data-icon="x" title="Close"></button></header>
+      <div class="panel-body">
+        <section>
+          <h4>Stream quality</h4>
+          <select id="qualitySel" aria-label="Stream quality"></select>
+          <p class="note" id="qualityNote">Either of you can change this. The PC sending the movie applies it.</p>
+          <label class="field-inline host-only"><span>Video codec</span>
+            <select id="codecSel">
+              <option value="h264">H.264 (best on iPhone)</option>
+              <option value="vp9">VP9</option>
+              <option value="av1">AV1</option>
+              <option value="vp8">VP8</option>
+              <option value="auto">Browser default</option>
+            </select>
+          </label>
+        </section>
+
+        <section>
+          <h4>Sound</h4>
+          <label class="slider"><span>Movie volume</span><input id="movieVol" type="range" min="0" max="150" value="100"><output id="movieVolOut">100%</output></label>
+          <label class="slider" id="voiceVolRow"><span>Partner's voice</span><input id="voiceVol" type="range" min="0" max="100" value="100"><output id="voiceVolOut">100%</output></label>
+          <label class="slider host-only" id="localVolRow"><span>Movie on this PC</span><input id="localVol" type="range" min="0" max="100" value="100"><output id="localVolOut">100%</output></label>
+          <p class="note">Movie volume changes what the person watching hears, so you can balance it against your voices. Earphones stop the movie echoing through the mic.</p>
+        </section>
+
+        <section id="subsSection" class="host-only">
+          <h4>Subtitles</h4>
+          <div class="row">
+            <button id="subLoadBtn" class="ghost small" data-icon-left="subs">Load .srt / .vtt</button>
+            <button id="subClearBtn" class="ghost small hidden">Remove</button>
+          </div>
+          <p class="note" id="subName">Subtitles are sent as text and drawn sharp on both screens.</p>
+          <div class="row stepper"><span>Timing</span><button id="subEarlier" class="chip">−0.5 s</button><output id="subOffsetOut">0.0 s</output><button id="subLater" class="chip">+0.5 s</button></div>
+        </section>
+
+        <section>
+          <h4>Subtitle size</h4>
+          <input id="subSize" type="range" min="70" max="180" value="100" aria-label="Subtitle size">
+        </section>
+
+        <section class="host-only">
+          <h4>Sharing</h4>
+          <label class="check"><input type="checkbox" id="allowControl" checked> Let my partner play, pause and seek</label>
+          <button id="popoutBtn" class="ghost small" data-icon-left="pip">Pop out camera and chat</button>
+        </section>
+
+        <section>
+          <h4>Connection</h4>
+          <label class="check"><input type="checkbox" id="statsToggle"> Show live stats</label>
+        </section>
+      </div>
+    </aside>
+
+    <pre id="stats" class="stats hidden"></pre>
+    <input type="file" id="fileInput" accept="video/*,.mkv,.mp4,.m4v,.webm,.mov" hidden>
+    <input type="file" id="subInput" accept=".srt,.vtt,text/vtt,application/x-subrip" hidden>
+  </section>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

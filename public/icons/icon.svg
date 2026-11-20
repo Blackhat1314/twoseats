@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="0%" r="90%">
+      <stop offset="0" stop-color="#4a2350"/><stop offset="1" stop-color="#170c1c"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <g fill="#f5c86a" filter="url(#glow)">
+    <rect x="110" y="170" width="128" height="120" rx="30"/>
+    <rect x="92" y="300" width="164" height="44" rx="18" fill="#d99a2b"/>
+    <rect x="274" y="170" width="128" height="120" rx="30"/>
+    <rect x="256" y="300" width="164" height="44" rx="18" fill="#d99a2b"/>
+  </g>
+  <rect x="118" y="352" width="18" height="38" rx="6" fill="#d99a2b"/><rect x="212" y="352" width="18" height="38" rx="6" fill="#d99a2b"/>
+  <rect x="282" y="352" width="18" height="38" rx="6" fill="#d99a2b"/><rect x="376" y="352" width="18" height="38" rx="6" fill="#d99a2b"/>
+  <path d="M256 150c-10-22-46-22-46 6 0 22 46 46 46 46s46-24 46-46c0-28-36-28-46-6z" fill="#fff3cf" transform="translate(0 -40)"/>
+</svg>
